@@ -17,7 +17,6 @@ public:
 
   WindowConfig() {}
   WindowConfig(int height, int width) : height(height), width(width) {}
-  ~WindowConfig();
 };
 
 class RectangleParams {
@@ -37,7 +36,6 @@ public:
                   std::tuple<int, int, int> rgb, std::tuple<float, float> size)
       : height(height), width(width), name(name), position(position),
         velocity(velocity), rgb(rgb), size(size) {}
-  ~RectangleParams();
 };
 
 void read_config_file(const std::string filename, WindowConfig &window,
@@ -80,17 +78,20 @@ int main(int argc, char *argv[]) {
   window.setFramerateLimit(60);
 
   std::vector<sf::RectangleShape> rects;
+  std::vector<std::tuple<float, float>> velocities;
 
   for (auto &elem : rects_conf) {
     sf::RectangleShape shape(
         std::make_from_tuple<sf::Vector2f>(std::move(elem.size)));
     shape.setFillColor(std::make_from_tuple<sf::Color>(std::move(elem.rgb)));
     rects.push_back(shape);
+    velocities.push_back(elem.velocity);
   }
 
+  const int WINDOW_W = window.getSize().x;
+  const int WINDOW_H = window.getSize().y;
+
   while (window.isOpen()) {
-    const int WINDOW_W = window.getSize().x;
-    const int WINDOW_H = window.getSize().y;
 
     sf::Event event;
     while (window.pollEvent(event)) {
@@ -99,24 +100,27 @@ int main(int argc, char *argv[]) {
     }
     window.clear();
 
-    for (auto &rect : rects) {
-      float Xv = 1.f, Vy = 0.5f;
-      auto current_pos = rect.getPosition();
-      if ((current_pos.x - 1 <= 0) || (current_pos.y - 1 <= 0)) {
-        Xv = 1.f;
-        Vy = 0.5f;
-      }
-      if ((current_pos.x + rect.getSize().x >= WINDOW_W) ||
-          (current_pos.y + rect.getSize().y >= WINDOW_H)) {
-        Xv = -1.f;
-        Vy = -0.5f;
+    for (size_t i = 0; i < rects.size(); i++) {
+      auto &shape = rects[i];
+      auto current_pos = shape.getPosition();
+      auto velocity = velocities[i];
+      float vx = std::get<0>(velocity), vy = std::get<1>(velocity);
+      if (current_pos.x <= 0 && vx < 0) {
+        vx = -vx;
+      } else if (current_pos.x + shape.getSize().x >= WINDOW_W && vx > 0) {
+        vx = -vx;
       }
 
-      rect.move(Xv, Vy);
-      sf::Vector2f pos = rect.getPosition();
-      window.draw(rect);
+      if (current_pos.y <= 0 && vy < 0) {
+        vy = -vy;
+      } else if (current_pos.y + shape.getSize().y >= WINDOW_H && vy > 0) {
+        vy = -vy;
+      }
+
+      shape.move(vx, vy);
+      window.draw(shape);
+      velocities[i] = std::tuple(vx, vy);
     }
-
     window.display();
   }
 
