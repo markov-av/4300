@@ -1,12 +1,10 @@
-#include "SFML/Graphics/RectangleShape.hpp"
-#include "SFML/Window/Event.hpp"
-#include <fstream>
-#include <iostream>
-#include <string>
-
 #include <SFML/Graphics.hpp>
 #include <SFML/System/Vector2.hpp>
 #include <SFML/Window.hpp>
+#include <fstream>
+#include <iostream>
+#include <memory>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -19,27 +17,20 @@ public:
   WindowConfig(int height, int width) : height(height), width(width) {}
 };
 
-class RectangleParams {
+class Entity {
 public:
-  int height = 0;
-  int width = 0;
-  std::string name = "";
-  std::tuple<float, float> position;
+  std::string type = "";
+  std::unique_ptr<sf::Shape> shape;
   std::tuple<float, float> velocity;
-  std::tuple<int, int, int> rgb;
-  std::tuple<float, float> size;
 
-  RectangleParams() {}
-  RectangleParams(int height, int width, std::string name,
-                  std::tuple<float, float> position,
-                  std::tuple<float, float> velocity,
-                  std::tuple<int, int, int> rgb, std::tuple<float, float> size)
-      : height(height), width(width), name(name), position(position),
-        velocity(velocity), rgb(rgb), size(size) {}
+  Entity() {}
+  Entity(std::string type, std::tuple<float, float> velocity,
+         std::unique_ptr<sf::Shape> shape)
+      : type(type), shape(std::move(shape)), velocity(velocity) {}
 };
 
 void read_config_file(const std::string filename, WindowConfig &window,
-                      std::vector<RectangleParams> &rects) {
+                      std::vector<Entity> &entities) {
   std::fstream fin(filename);
   std::string temp;
 
@@ -50,19 +41,27 @@ void read_config_file(const std::string filename, WindowConfig &window,
       continue;
     }
     if (temp == "Rectangle") {
-      RectangleParams rectangle;
-      fin >> rectangle.name;
+      Entity entity;
+      std::unique_ptr<sf::RectangleShape> shape =
+          std::make_unique<sf::RectangleShape>();
+      fin >> entity.type;
       float x, y, vx, vy;
-      fin >> x, fin >> y, fin >> vx, fin >> vy;
-      rectangle.position = {x, y};
-      rectangle.velocity = {vx, vy};
       int r, g, b;
+
+      fin >> x, fin >> y, fin >> vx, fin >> vy;
+      shape->setPosition(x, y);
+      entity.velocity = {vx, vy};
+
       fin >> r, fin >> g, fin >> b;
-      rectangle.rgb = {r, g, b};
+      shape->setFillColor(sf::Color(r, g, b));
+
       fin >> x, fin >> y;
-      rectangle.size = {x, y};
-      rects.push_back(rectangle);
+      shape->setSize(sf::Vector2f(x, y));
+
+      entity.shape = std::move(shape);
+      entities.push_back(std::move(entity));
     }
+    // То же самое для "Circle"...
   }
   fin.close();
 }
@@ -70,29 +69,17 @@ void read_config_file(const std::string filename, WindowConfig &window,
 int main(int argc, char *argv[]) {
   const std::string config_file_path = "config.txt";
   WindowConfig window_conf;
-  std::vector<RectangleParams> rects_conf;
-  read_config_file(config_file_path, window_conf, rects_conf);
+  std::vector<Entity> entities;
+  read_config_file(config_file_path, window_conf, entities);
 
   sf::RenderWindow window(sf::VideoMode(window_conf.height, window_conf.width),
                           "SFML window");
   window.setFramerateLimit(60);
 
-  std::vector<sf::RectangleShape> rects;
-  std::vector<std::tuple<float, float>> velocities;
-
-  for (auto &elem : rects_conf) {
-    sf::RectangleShape shape(
-        std::make_from_tuple<sf::Vector2f>(std::move(elem.size)));
-    shape.setFillColor(std::make_from_tuple<sf::Color>(std::move(elem.rgb)));
-    rects.push_back(shape);
-    velocities.push_back(elem.velocity);
-  }
-
   const int WINDOW_W = window.getSize().x;
   const int WINDOW_H = window.getSize().y;
 
   while (window.isOpen()) {
-
     sf::Event event;
     while (window.pollEvent(event)) {
       if (event.type == sf::Event::Closed)
@@ -100,27 +87,42 @@ int main(int argc, char *argv[]) {
     }
     window.clear();
 
-    for (size_t i = 0; i < rects.size(); i++) {
-      auto &shape = rects[i];
-      auto current_pos = shape.getPosition();
-      auto velocity = velocities[i];
+    for (size_t i = 0; i < entities.size(); i++) {
+      auto &entity = entities[i];
+      auto *shape = entity.shape.get();
+      auto current_pos = shape->getPosition();
+      auto &velocity = entity.velocity;
       float vx = std::get<0>(velocity), vy = std::get<1>(velocity);
-      if (current_pos.x <= 0 && vx < 0) {
-        vx = -vx;
-      } else if (current_pos.x + shape.getSize().x >= WINDOW_W && vx > 0) {
-        vx = -vx;
+
+      sf::FloatRect bounds = shape->getGlobalBounds();
+      float shapeWidth = bounds.width;
+      float shapeHeight = bounds.height;
+
+      if (bounds.left <= 0 && vx < 0) {
+        vx *= -1;
+      } else if (bounds.left + shapeWidth >= WINDOW_W && vx > 0) {
+        vx *= -1;
       }
 
-      if (current_pos.y <= 0 && vy < 0) {
-        vy = -vy;
-      } else if (current_pos.y + shape.getSize().y >= WINDOW_H && vy > 0) {
-        vy = -vy;
+      if (bounds.top <= 0 && vy < 0) {
+        vy *= -1;
+      } else if (bounds.top + shapeHeight >= WINDOW_H && vy > 0) {
+        vy *= -1;
       }
-
-      shape.move(vx, vy);
-      window.draw(shape);
-      velocities[i] = std::tuple(vx, vy);
+      entity.velocity = {vx, vy};
     }
+
+    for (size_t i = 0; i < entities.size(); i++) {
+      auto &entity = entities[i];
+      auto *shape = entity.shape.get();
+      auto &velocity = entity.velocity;
+
+      float vx = std::get<0>(velocity), vy = std::get<1>(velocity);
+
+      shape->move(vx, vy);
+      window.draw(*shape);
+    }
+
     window.display();
   }
 
