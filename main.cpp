@@ -61,7 +61,28 @@ void read_config_file(const std::string filename, WindowConfig &window,
       entity.shape = std::move(shape);
       entities.push_back(std::move(entity));
     }
-    // То же самое для "Circle"...
+    if (temp == "Circle") {
+      Entity entity;
+      std::unique_ptr<sf::CircleShape> shape =
+          std::make_unique<sf::CircleShape>();
+      fin >> entity.type;
+
+      float x, y, vx, vy, radius;
+      int r, g, b;
+
+      fin >> x, fin >> y, fin >> vx, fin >> vy;
+      shape->setPosition(x, y);
+      entity.velocity = {vx, vy};
+
+      fin >> r, fin >> g, fin >> b;
+      shape->setFillColor(sf::Color(r, g, b));
+
+      fin >> radius;
+      shape->setRadius(radius);
+
+      entity.shape = std::move(shape);
+      entities.push_back(std::move(entity));
+    }
   }
   fin.close();
 }
