@@ -130,7 +130,27 @@ int main(int argc, char *argv[]) {
       } else if (bounds.top + shapeHeight >= WINDOW_H && vy > 0) {
         vy *= -1;
       }
-      entity.velocity = {vx, vy};
+
+      bool is_intersect = false;
+      for (auto &entity_col : entities) {
+        bool is_before = true;
+        if (&entity_col == &entity) {
+          is_before = false;
+          continue;
+        }
+        auto *shape_col = entity_col.shape.get();
+        bool r =
+            shape->getGlobalBounds().intersects(shape_col->getGlobalBounds());
+        if (r) {
+          is_intersect = true;
+          break;
+        }
+      }
+      if (is_intersect) {
+        entity.velocity = {vx * -1, vy * -1};
+      } else {
+        entity.velocity = {vx, vy};
+      }
     }
 
     for (size_t i = 0; i < entities.size(); i++) {
