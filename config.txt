@@ -1,4 +1,4 @@
 Window 800 600
-Rectangle RRed 400 300 5 4 255 0 0 100 200
-Rectangle GRed 400 300 -4 -7 0 255 0 200 100
+Rectangle RRed 400 300 5 4 255 0 0 50 100
+Rectangle GRed 150 300 -4 -7 0 255 0 70 50
 Circle CRed 300 400 5 -1 0 0 255 50
